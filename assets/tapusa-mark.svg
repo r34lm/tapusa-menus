@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title">
+  <title id="title">TapUSA</title>
+  <g fill="none" stroke="#1769e8" stroke-linecap="round">
+    <path d="M35 39a30 30 0 0 1 0 42" stroke-width="12"/>
+    <path d="M56 23a53 53 0 0 1 0 74" stroke-width="12"/>
+  </g>
+  <circle cx="20" cy="60" r="10" fill="#1769e8"/>
+</svg>

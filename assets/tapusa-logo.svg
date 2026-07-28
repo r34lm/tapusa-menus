@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 190" role="img" aria-labelledby="title">
+  <title id="title">TAP USA</title>
+  <g fill="none" stroke="#1769e8" stroke-linecap="round">
+    <path d="M54 48a69 69 0 0 1 0 94" stroke-width="18"/>
+    <path d="M83 25a104 104 0 0 1 0 140" stroke-width="18"/>
+  </g>
+  <circle cx="32" cy="95" r="15" fill="#1769e8"/>
+  <text x="137" y="136" fill="#f5f7fb" font-family="Arial, Helvetica, sans-serif" font-size="112" font-weight="500" letter-spacing="4">TAP</text>
+  <text x="440" y="136" fill="#1769e8" font-family="Arial, Helvetica, sans-serif" font-size="68" font-weight="500" letter-spacing="2">USA</text>
+</svg>
