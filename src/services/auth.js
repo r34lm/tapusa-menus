@@ -13,11 +13,18 @@ export async function signOut() {
 }
 
 export async function requestPasswordReset(email) {
-  const redirectTo = `${import.meta.env.VITE_SITE_URL ?? window.location.origin}/#reset-password`;
+  const siteUrl = (import.meta.env.VITE_SITE_URL ?? window.location.origin).replace(/\/$/, "");
+  const redirectTo = `${siteUrl}/set-password`;
   const { error } = await requireSupabase().auth.resetPasswordForEmail(email, {
     redirectTo,
   });
   throwIfError(error);
+}
+
+export async function updatePassword(password) {
+  const { data, error } = await requireSupabase().auth.updateUser({ password });
+  throwIfError(error);
+  return data.user;
 }
 
 export async function getCurrentSession() {

@@ -75,7 +75,9 @@ export function mapAdminRestaurant(row) {
     owner: owner?.full_name ?? "Unassigned",
     email: owner?.email ?? row.email ?? "",
     status: row.status,
+    published: row.published,
     items: itemCount,
+    createdAt: row.created_at,
     joined: new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",

@@ -45,7 +45,7 @@ Deno.serve(async (request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const siteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:4173";
+  const siteUrl = (Deno.env.get("SITE_URL") ?? "http://localhost:4173").replace(/\/$/, "");
   const authorization = request.headers.get("Authorization");
 
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !authorization) {
@@ -88,7 +88,7 @@ Deno.serve(async (request) => {
       const { data: invited, error: inviteError } =
         await adminClient.auth.admin.inviteUserByEmail(email, {
           data: { full_name: ownerName },
-          redirectTo: `${siteUrl}/#login`,
+          redirectTo: `${siteUrl}/set-password`,
         });
       if (inviteError || !invited.user) throw inviteError ?? new Error("Owner invitation failed");
       targetUserId = invited.user.id;
@@ -180,7 +180,7 @@ Deno.serve(async (request) => {
     } else if (body.action === "reset_password") {
       const email = requireString(body.email, "email").toLowerCase();
       const { error } = await callerClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${siteUrl}/#reset-password`,
+        redirectTo: `${siteUrl}/set-password`,
       });
       if (error) throw error;
       result = { sent: true };

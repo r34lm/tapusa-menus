@@ -4,6 +4,7 @@ import {
   requestPasswordReset,
   signIn,
   signOut,
+  updatePassword,
 } from "./src/services/auth.js";
 import {
   getPublicMenu,
@@ -59,6 +60,7 @@ const icons = {
 
 const seed = {
   session: { loggedIn: false, role: "owner" },
+  ownerName: "Maya Chen",
   restaurant: {
     id: "r1",
     name: "Ember & Oak",
@@ -153,13 +155,20 @@ function toast(message) {
 }
 
 function route() {
+  if (applicationPath() === "set-password") return "set-password";
   if (publicPathSlug()) return "public";
   return location.hash.slice(1) || (state.session.loggedIn ? (state.session.role === "admin" ? "admin" : "dashboard") : "login");
 }
 
-function publicPathSlug() {
+function applicationPath() {
   const segment = location.pathname.replace(/^\/+|\/+$/g, "");
   if (!segment || segment.includes(".") || segment === "index.html") return "";
+  return segment;
+}
+
+function publicPathSlug() {
+  const segment = applicationPath();
+  if (segment === "set-password") return "";
   return segment;
 }
 
@@ -169,13 +178,14 @@ function navigate(path) {
 
 function render() {
   const current = route();
+  if (current === "set-password") return renderSetPassword();
   if (current === "public") return renderPublic();
   if (!state.session.loggedIn || current === "login") return renderLogin();
   renderApp(current);
 }
 
 function brand() {
-  return '<a class="brand" href="#dashboard" aria-label="TapUSA Menus"><img class="brand-logo" src="assets/tapusa-logo.svg" alt="TapUSA"><span class="brand-product">Menus</span></a>';
+  return '<a class="brand" href="#dashboard" aria-label="TapUSA Menus"><img class="brand-logo" src="/assets/tapusa-logo.svg" alt="TapUSA"><span class="brand-product">Menus</span></a>';
 }
 
 function renderLogin() {
@@ -216,6 +226,39 @@ function renderLogin() {
   bindCommon();
 }
 
+function renderSetPassword() {
+  document.querySelector("#app").innerHTML = `
+    <main class="login-page">
+      <section class="login-visual">
+        ${brand()}
+        <div class="login-quote">
+          <div class="eyebrow">Secure account setup</div>
+          <h1>Create your<br><span>private password.</span></h1>
+          <p>Choose a password for your TapUSA Menus account. TapUSA staff will never be able to view it.</p>
+        </div>
+        <p style="color:var(--muted-2);font-size:11px;position:relative;z-index:1">Protected by Supabase Auth</p>
+      </section>
+      <section class="login-form-wrap">
+        <form class="login-form" id="set-password-form">
+          <div class="eyebrow">Finish account setup</div>
+          <h2>Choose a password</h2>
+          <p>Use at least 10 characters. A passphrase is easiest to remember.</p>
+          <div class="form-group">
+            <label for="new-password">New password</label>
+            <input class="field" id="new-password" name="password" type="password" minlength="10" autocomplete="new-password" required>
+          </div>
+          <div class="form-group">
+            <label for="confirm-password">Confirm password</label>
+            <input class="field" id="confirm-password" name="confirmation" type="password" minlength="10" autocomplete="new-password" required>
+          </div>
+          <button class="btn primary" type="submit">${icons.lock} Save password</button>
+          <div class="demo-switch">Invite link expired? <a href="/#login" style="color:var(--accent)">Return to login</a> and request a new email.</div>
+        </form>
+      </section>
+    </main>`;
+  bindCommon();
+}
+
 function navItem(path, icon, label, badge = "") {
   return `<a class="nav-item ${route() === path ? "active" : ""}" href="#${path}">${icons[icon]}<span>${label}</span>${badge ? `<span class="nav-badge">${badge}</span>` : ""}</a>`;
 }
@@ -234,8 +277,8 @@ function sidebar() {
       <div class="sidebar-bottom">
         ${admin ? "" : '<div class="support-card"><strong>Need a hand?</strong><span>TapUSA support is here to help with your menu.</span></div>'}
         <div class="profile">
-          <div class="avatar">${admin ? '<img src="assets/tapusa-mark.svg" alt="TapUSA">' : "MC"}</div>
-          <div class="profile-copy"><strong>${admin ? "TapUSA Admin" : "Maya Chen"}</strong><span>${admin ? "Super administrator" : state.restaurant.name}</span></div>
+          <div class="avatar">${admin ? '<img src="/assets/tapusa-mark.svg" alt="TapUSA">' : escapeHtml((state.ownerName || "Owner").split(" ").map((part) => part[0]).join("").slice(0, 2))}</div>
+          <div class="profile-copy"><strong>${admin ? "TapUSA Admin" : escapeHtml(state.ownerName || "Restaurant Owner")}</strong><span>${admin ? "Super administrator" : state.restaurant.name}</span></div>
           <button class="btn ghost icon-only" data-action="logout" aria-label="Log out">${icons.logout}</button>
         </div>
       </div>
@@ -277,37 +320,45 @@ function pageTitle(current) {
 function ownerDashboard() {
   const itemCount = state.categories.reduce((n, category) => n + category.items.length, 0);
   const available = state.categories.reduce((n, category) => n + category.items.filter((item) => item.available).length, 0);
+  const emptyCategories = state.categories.filter((category) => category.items.length === 0).length;
+  const firstName = (state.ownerName || "there").split(" ")[0];
+  const detailsComplete = Boolean(state.restaurant.name && state.restaurant.email && state.restaurant.address);
+  const hasMenu = itemCount > 0;
+  const hasBrand = Boolean(state.restaurant.logo || state.restaurant.banner);
+  const setupSteps = [detailsComplete, hasMenu, hasBrand, state.restaurant.published];
+  const completedSteps = setupSteps.filter(Boolean).length;
+  const completion = Math.round((completedSteps / setupSteps.length) * 100);
   return `<div class="content">
     <div class="page-header">
-      <div><div class="eyebrow">Restaurant overview</div><h1>Good afternoon, Maya.</h1><p>Everything you need to keep ${escapeHtml(state.restaurant.name)} up to date.</p></div>
+      <div><div class="eyebrow">Restaurant overview</div><h1>Good afternoon, ${escapeHtml(firstName)}.</h1><p>Everything you need to keep ${escapeHtml(state.restaurant.name)} up to date.</p></div>
       <div class="page-actions"><button class="btn primary" data-modal="item">${icons.plus} Add menu item</button></div>
     </div>
     <div class="grid stats-grid">
-      ${stat("menu", itemCount, "Menu items", "+3 this month")}
-      ${stat("dashboard", state.categories.length, "Categories", "Well organized")}
+      ${stat("menu", itemCount, "Menu items", `${available} available`)}
+      ${stat("dashboard", state.categories.length, "Categories", emptyCategories ? `${emptyCategories} empty` : "All have items")}
       ${stat("check", available, "Available now", `${itemCount - available} unavailable`)}
-      ${stat("eye", "1,284", "Menu views", "+18% this week")}
+      ${stat("eye", state.restaurant.published ? "Live" : "Draft", "Menu status", state.restaurant.published ? "Visible to customers" : "Not publicly visible")}
     </div>
     <div class="grid two-col">
       <section class="card">
-        <div class="card-header"><div><h2>Getting started</h2><p>Finish these steps to make your menu shine.</p></div><span class="pill">3 of 4</span></div>
+        <div class="card-header"><div><h2>Getting started</h2><p>Finish these steps to make your menu shine.</p></div><span class="pill">${completedSteps} of 4</span></div>
         <div class="card-body">
           <div class="checklist">
-            ${checkRow("Add restaurant details", "Your contact information is complete.", true)}
-            ${checkRow("Build your menu", `${itemCount} items across ${state.categories.length} categories.`, true)}
-            ${checkRow("Customize your brand", "Logo and colors are ready.", true)}
-            ${checkRow("Share your menu", "Add the link or QR code to your tables.", false)}
+            ${checkRow("Add restaurant details", detailsComplete ? "Your contact information is complete." : "Add an email and street address.", detailsComplete)}
+            ${checkRow("Build your menu", `${itemCount} items across ${state.categories.length} categories.`, hasMenu)}
+            ${checkRow("Customize your brand", hasBrand ? "Your restaurant artwork is ready." : "Upload a logo or banner.", hasBrand)}
+            ${checkRow("Publish your menu", state.restaurant.published ? "Customers can view your menu." : "Publish when you are ready for customers.", state.restaurant.published)}
           </div>
-          <div class="progress-wrap"><div class="progress-meta"><span>Profile completion</span><span>75%</span></div><div class="progress"><span></span></div></div>
+          <div class="progress-wrap"><div class="progress-meta"><span>Setup completion</span><span>${completion}%</span></div><div class="progress"><span style="width:${completion}%"></span></div></div>
         </div>
       </section>
       <section class="card">
-        <div class="card-header"><div><h2>Recent activity</h2><p>Changes to your menu.</p></div></div>
+        <div class="card-header"><div><h2>Menu snapshot</h2><p>Live totals from your current menu.</p></div></div>
         <div class="card-body activity">
-          ${activity("edit", "Ember Burger updated", "Price changed to $19.00", "12m")}
-          ${activity("plus", "New item added", "Dark Chocolate Tart", "2h")}
-          ${activity("eye", "Menu published", "All changes are live", "1d")}
-          ${activity("store", "Restaurant details", "Hours and phone updated", "3d")}
+          ${activity("dashboard", `${state.categories.length} categories`, emptyCategories ? `${emptyCategories} still empty` : "Every category has items", "")}
+          ${activity("menu", `${itemCount} total items`, `${available} available to customers`, "")}
+          ${activity("eye", `${itemCount - available} hidden items`, itemCount === available ? "Nothing is currently hidden" : "Unavailable items stay off the public menu", "")}
+          ${activity("store", state.restaurant.published ? "Menu is published" : "Menu is a draft", state.restaurant.published ? `Live at /${state.restaurant.slug}` : "Publish to make it public", "")}
         </div>
       </section>
     </div>
@@ -394,25 +445,36 @@ function restaurantSettings() {
 }
 
 function adminDashboard() {
+  const total = state.restaurants.length;
   const active = state.restaurants.filter((r) => r.status === "active").length;
   const items = state.restaurants.reduce((n, r) => n + r.items, 0);
+  const disabled = total - active;
+  const published = state.restaurants.filter((r) => r.published).length;
+  const emptyMenus = state.restaurants.filter((r) => r.items === 0).length;
+  const now = new Date();
+  const newThisMonth = state.restaurants.filter((restaurant) => {
+    if (!restaurant.createdAt) return false;
+    const created = new Date(restaurant.createdAt);
+    return created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth();
+  }).length;
+  const healthIssues = Number(disabled > 0) + Number(emptyMenus > 0);
   return `<div class="content">
     <div class="page-header">
       <div><div class="eyebrow">TapUSA control center</div><h1>Platform overview</h1><p>Manage every restaurant and monitor the network from one place.</p></div>
       <div class="page-actions"><button class="btn primary" data-modal="restaurant-account">${icons.plus} Add restaurant</button></div>
     </div>
     <div class="grid stats-grid">
-      ${stat("store", state.restaurants.length, "Total restaurants", "+2 this month")}
-      ${stat("check", active, "Active accounts", "Healthy")}
+      ${stat("store", total, "Total restaurants", newThisMonth ? `${newThisMonth} this month` : "No new this month")}
+      ${stat("check", active, "Active accounts", total ? `${Math.round((active / total) * 100)}% of total` : "No accounts yet")}
       ${stat("menu", items, "Menu items", "Across all menus")}
-      ${stat("eye", "18.6k", "Monthly views", "+23%")}
+      ${stat("lock", disabled, "Disabled accounts", disabled ? "Needs attention" : "None disabled")}
     </div>
     <div class="grid two-col">
       <section class="card"><div class="card-header"><div><h2>Recently added</h2><p>Newest restaurant accounts.</p></div><a class="btn small" href="#restaurants">View all</a></div><div class="table-wrap">${restaurantTable(state.restaurants.slice(0, 4), false)}</div></section>
-      <section class="card"><div class="card-header"><div><h2>Platform health</h2><p>Current system status.</p></div><span class="pill">All systems normal</span></div><div class="card-body checklist">
-        ${checkRow("Public menus", "All menu pages are operational.", true)}
-        ${checkRow("Image delivery", "Assets are loading normally.", true)}
-        ${checkRow("Account services", "Authentication is available.", true)}
+      <section class="card"><div class="card-header"><div><h2>Platform health</h2><p>Calculated from current restaurant data.</p></div><span class="pill ${healthIssues ? "disabled" : ""}">${healthIssues ? `${healthIssues} need attention` : "All clear"}</span></div><div class="card-body checklist">
+        ${checkRow("Published menus", `${published} of ${total} restaurants are publicly visible.`, published === total)}
+        ${checkRow("Account status", disabled ? `${disabled} account${disabled === 1 ? " is" : "s are"} disabled.` : "Every restaurant account is active.", disabled === 0)}
+        ${checkRow("Menu content", emptyMenus ? `${emptyMenus} restaurant${emptyMenus === 1 ? " has" : "s have"} no menu items.` : "Every restaurant has menu content.", emptyMenus === 0)}
       </div></section>
     </div>
   </div>`;
@@ -462,7 +524,7 @@ function renderPublic() {
       <p class="public-description">${escapeHtml(r.description)}</p>
       <nav class="category-tabs">${categories.map((c) => `<button class="category-tab" data-scroll="${c.id}">${escapeHtml(c.name)}</button>`).join("")}</nav>
       ${categories.map((c) => `<section class="public-section" id="section-${c.id}"><div class="public-section-head"><h2>${escapeHtml(c.name)}</h2><span>${c.items.length} item${c.items.length === 1 ? "" : "s"}</span></div><div class="public-items">${c.items.map(publicItem).join("")}</div></section>`).join("")}
-      <div class="powered"><img src="assets/tapusa-mark.svg" alt="">Powered by TapUSA Menus</div>
+      <div class="powered"><img src="/assets/tapusa-mark.svg" alt="">Powered by TapUSA Menus</div>
     </div>
   </main>`;
   document.querySelectorAll("[data-scroll]").forEach((node) => node.addEventListener("click", () => {
@@ -522,6 +584,7 @@ function bindCommon() {
   }));
   const loginForm = document.querySelector("#login-form");
   if (loginForm) loginForm.addEventListener("submit", handleLogin);
+  document.querySelector("#set-password-form")?.addEventListener("submit", handleSetPassword);
   document.querySelectorAll("[data-role]").forEach((node) => node.addEventListener("click", () => {
     state.session.role = node.dataset.role;
     saveState();
@@ -566,6 +629,7 @@ async function hydrateAuthenticatedState() {
   currentUserId = auth.user.id;
   const role = auth.profile.role === "super_admin" ? "admin" : "owner";
   state.session = { loggedIn: true, role };
+  state.ownerName = auth.profile.full_name || auth.profile.email;
 
   if (role === "admin") {
     state.restaurants = await listAdminRestaurants();
@@ -609,6 +673,28 @@ async function handleLogin(event) {
       saveState();
       navigate(state.session.role === "admin" ? "admin" : "dashboard");
     }
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+async function handleSetPassword(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const password = data.get("password");
+  const confirmation = data.get("confirmation");
+  if (password !== confirmation) {
+    toast("Passwords do not match.");
+    return;
+  }
+
+  try {
+    if (!isSupabaseConfigured) throw new Error("Supabase is not configured.");
+    await updatePassword(password);
+    const role = await hydrateAuthenticatedState();
+    history.replaceState({}, "", role === "admin" ? "/#admin" : "/#dashboard");
+    render();
+    toast("Password saved successfully.");
   } catch (error) {
     reportError(error);
   }

@@ -355,7 +355,8 @@ h3,
 }
 
 .btn.primary:hover {
-  background: #c4fa61;
+  border-color: #5594f8;
+  background: #5594f8;
 }
 
 .btn.ghost {
