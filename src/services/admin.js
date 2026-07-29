@@ -1,10 +1,33 @@
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { requireSupabase, throwIfError } from "../lib/supabase.js";
 
 async function invokeAdmin(body) {
-  const { data, error } = await requireSupabase().functions.invoke(
+  const client = requireSupabase();
+  const { data: sessionData, error: sessionError } = await client.auth.getSession();
+  throwIfError(sessionError);
+  if (!sessionData.session?.access_token) {
+    throw new Error("Your session has expired. Sign in again and retry.");
+  }
+
+  const { data, error } = await client.functions.invoke(
     "admin-restaurants",
-    { body },
+    {
+      body,
+      headers: {
+        Authorization: `Bearer ${sessionData.session.access_token}`,
+      },
+    },
   );
+  if (error instanceof FunctionsHttpError) {
+    let message = error.message;
+    try {
+      const payload = await error.context.json();
+      message = payload?.error || payload?.message || message;
+    } catch {
+      // The response was not JSON; retain the SDK error message.
+    }
+    throw new Error(message);
+  }
   throwIfError(error);
   if (data?.error) throw new Error(data.error);
   return data?.data;
