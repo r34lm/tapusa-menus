@@ -178,6 +178,7 @@ function navigate(path) {
 
 function render() {
   const current = route();
+  document.body.dataset.view = current;
   if (current === "set-password") return renderSetPassword();
   if (current === "public") return renderPublic();
   if (!state.session.loggedIn || current === "login") return renderLogin();
