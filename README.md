@@ -58,6 +58,8 @@ backend errors are shown instead of silently falling back to local data.
 - `supabase/seed.sql`: local users and the Ember & Oak sample menu.
 - `supabase/functions/admin-restaurants/`: privileged owner invitations, account
   changes, disable/enable, password resets, deletion, and audit events.
+- `api/import-menu.js`: authenticated Vercel Function that extracts structured
+  menu data from owner-uploaded photos with AI Gateway.
 - `src/lib/`: browser-safe Supabase client configuration.
 - `src/services/`: auth, restaurants, menu CRUD, uploads, admin actions, and row
   mapping.
@@ -109,6 +111,32 @@ All subsequent owner accounts are created from the Super Admin portal.
 
 The production host must rewrite unknown paths to `/index.html` so restaurant
 slugs such as `/ember-and-oak` reach the client application.
+
+## AI menu photo import
+
+Owners can upload one to three JPG, PNG, or WebP menu photos from the Menu
+Manager. Images are resized in the browser, temporarily stored in the
+restaurant's private Supabase import bucket, and removed after extraction.
+Owners must review and approve the editable result before categories and items
+are appended. Confirmation is idempotent, so a network retry cannot duplicate
+the imported categories.
+
+The API verifies the Supabase access token and restaurant membership before
+calling AI Gateway. The database limits each restaurant to five extraction
+attempts per calendar month. Apply the latest migration before enabling it:
+
+```powershell
+npx supabase db push
+```
+
+Vercel production deployments authenticate to AI Gateway with their generated
+`VERCEL_OIDC_TOKEN`. For local testing, add a server-only
+`AI_GATEWAY_API_KEY` to `.env.local` and run the app through Vercel so the
+`/api/import-menu` function is available:
+
+```powershell
+npx vercel dev
+```
 
 ## Verification
 

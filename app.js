@@ -24,6 +24,10 @@ import {
   updateCategory,
   updateMenuItem,
 } from "./src/services/menu.js";
+import {
+  commitImportedMenu,
+  extractMenuFromImages,
+} from "./src/services/menu-import.js";
 import { uploadRestaurantImage } from "./src/services/storage.js";
 import {
   createRestaurantAccount,
@@ -113,6 +117,9 @@ let state = loadState();
 let modal = null;
 let searchTerm = "";
 let currentUserId = null;
+let menuImportDraft = null;
+let menuImportId = null;
+let menuImportStatus = "";
 
 function loadState() {
   if (isSupabaseConfigured) return structuredClone(seed);
@@ -383,7 +390,7 @@ function menuManager() {
   return `<div class="content">
     <div class="page-header">
       <div><div class="eyebrow">Menu content</div><h1>Menu manager</h1><p>${total} items across ${state.categories.length} categories. Changes save automatically.</p></div>
-      <div class="page-actions"><button class="btn" data-modal="category">${icons.plus} Category</button><button class="btn primary" data-modal="item">${icons.plus} Add item</button></div>
+      <div class="page-actions"><button class="btn" data-modal="menu-import">${icons.upload} Import photo</button><button class="btn" data-modal="category">${icons.plus} Category</button><button class="btn primary" data-modal="item">${icons.plus} Add item</button></div>
     </div>
     <div class="section-stack">
       ${state.categories.map((category, index) => categoryCard(category, index)).join("") || '<div class="empty card"><strong>Your menu is empty</strong>Add a category to get started.</div>'}
@@ -538,6 +545,73 @@ function publicItem(item) {
 }
 
 function modalMarkup() {
+  if (modal.type === "menu-import") {
+    if (menuImportStatus) {
+      return modalShell(
+        "Import menu from photos",
+        `<div class="import-loading"><span class="import-spinner" aria-hidden="true"></span><strong>${escapeHtml(menuImportStatus)}</strong><p>Keep this window open while the menu is processed.</p></div>`,
+        "",
+        "Working…",
+        "menu-import-modal",
+        true,
+      );
+    }
+
+    if (menuImportDraft) {
+      const warnings = menuImportDraft.warnings ?? [];
+      const body = `<form id="menu-import-review-form" class="import-review">
+        <div class="import-review-intro">
+          <div><strong>Review before adding</strong><p>Correct anything the scanner misread. Your existing menu will not be replaced.</p></div>
+          <span class="pill">${menuImportDraft.currency || "USD"}</span>
+        </div>
+        ${warnings.length ? `<div class="import-warnings"><strong>Check these details</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
+        <div class="import-categories">
+          ${menuImportDraft.categories.map((category, categoryIndex) => `
+            <section class="import-category">
+              <div class="import-category-head">
+                <div class="form-group">
+                  <label for="import-category-${categoryIndex}">Category</label>
+                  <input class="field" id="import-category-${categoryIndex}" name="category-${categoryIndex}" value="${escapeHtml(category.name)}" maxlength="80" required>
+                </div>
+                <button class="btn ghost danger icon-only small" type="button" data-remove-import-category="${categoryIndex}" aria-label="Remove category">${icons.trash}</button>
+              </div>
+              <div class="import-items">
+                ${category.items.map((item, itemIndex) => `
+                  <div class="import-item">
+                    <div class="import-item-head"><strong>Item ${itemIndex + 1}</strong><button class="btn ghost danger icon-only small" type="button" data-remove-import-item="${itemIndex}" data-import-category="${categoryIndex}" aria-label="Remove item">${icons.close}</button></div>
+                    <div class="import-item-grid">
+                      <div class="form-group import-item-name"><label for="import-name-${categoryIndex}-${itemIndex}">Name</label><input class="field" id="import-name-${categoryIndex}-${itemIndex}" name="name-${categoryIndex}-${itemIndex}" value="${escapeHtml(item.name)}" maxlength="120" required></div>
+                      <div class="form-group import-item-price"><label for="import-price-${categoryIndex}-${itemIndex}">Price</label><input class="field" id="import-price-${categoryIndex}-${itemIndex}" name="price-${categoryIndex}-${itemIndex}" type="number" min="0" max="1000000" step=".01" value="${item.price_cents == null ? "" : (item.price_cents / 100).toFixed(2)}" placeholder="Required" required></div>
+                      <div class="form-group import-item-description"><label for="import-description-${categoryIndex}-${itemIndex}">Description</label><textarea class="field" id="import-description-${categoryIndex}-${itemIndex}" name="description-${categoryIndex}-${itemIndex}" maxlength="1000">${escapeHtml(item.description)}</textarea></div>
+                    </div>
+                  </div>`).join("")}
+              </div>
+              <button class="btn small" type="button" data-add-import-item="${categoryIndex}">${icons.plus} Add item</button>
+            </section>`).join("")}
+        </div>
+        <button class="btn" type="button" data-add-import-category>${icons.plus} Add category</button>
+      </form>`;
+      return modalShell(
+        "Review imported menu",
+        body,
+        "menu-import-review-form",
+        "Add to menu",
+        "menu-import-modal",
+      );
+    }
+
+    return modalShell(
+      "Import menu from photos",
+      `<form id="menu-import-form">
+        <div class="import-intro"><span class="import-mark">${icons.upload}</span><div><strong>Turn menu photos into editable items</strong><p>Upload up to three clear, well-lit pages. You will review every category, item, and price before anything is added.</p></div></div>
+        <div class="form-group"><label>Menu photos</label><label class="upload-zone import-upload">${icons.upload}<div><strong>Choose menu photos</strong><span>JPG, PNG, or WebP · up to 3 images</span></div><input type="file" name="menu-images" accept="image/jpeg,image/png,image/webp" multiple hidden required></label></div>
+        <p class="field-help">Five AI menu imports are included per restaurant each month.</p>
+      </form>`,
+      "menu-import-form",
+      "Scan menu",
+      "menu-import-modal",
+    );
+  }
   if (modal.type === "category") {
     const category = state.categories.find((c) => c.id === modal.id);
     return modalShell(category ? "Edit category" : "New category", `<form id="category-form"><div class="form-group"><label for="category-name">Category name</label><input class="field" id="category-name" name="name" value="${category ? escapeHtml(category.name) : ""}" placeholder="e.g. Appetizers" required></div></form>`, "category-form", category ? "Save category" : "Create category");
@@ -567,8 +641,8 @@ function modalMarkup() {
   return "";
 }
 
-function modalShell(title, body, formId, submitText) {
-  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}" onclick="event.stopPropagation()"><div class="modal-head"><h2>${escapeHtml(title)}</h2><button class="btn ghost icon-only" data-action="close-modal">${icons.close}</button></div><div class="modal-body">${body}</div><div class="modal-foot"><button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="${formId}">${submitText}</button></div></section></div>`;
+function modalShell(title, body, formId, submitText, className = "", submitDisabled = false) {
+  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal ${className}" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}" onclick="event.stopPropagation()"><div class="modal-head"><h2>${escapeHtml(title)}</h2><button class="btn ghost icon-only" data-action="close-modal">${icons.close}</button></div><div class="modal-body">${body}</div><div class="modal-foot"><button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" type="submit" form="${formId}" ${submitDisabled ? "disabled" : ""}>${submitText}</button></div></section></div>`;
 }
 
 function findItem(id) {
@@ -594,6 +668,11 @@ function bindCommon() {
   document.querySelectorAll("[data-action]").forEach((node) => node.addEventListener("click", handleAction));
   document.querySelectorAll("[data-modal]").forEach((node) => node.addEventListener("click", () => {
     modal = { type: node.dataset.modal, id: node.dataset.id, category: node.dataset.category };
+    if (modal.type === "menu-import") {
+      menuImportDraft = null;
+      menuImportId = null;
+      menuImportStatus = "";
+    }
     render();
   }));
   document.querySelectorAll("[data-toggle-item]").forEach((node) => node.addEventListener("click", () => toggleItem(node.dataset.category, node.dataset.toggleItem)));
@@ -608,6 +687,31 @@ function bindCommon() {
   document.querySelector("#category-form")?.addEventListener("submit", saveCategory);
   document.querySelector("#item-form")?.addEventListener("submit", saveItem);
   document.querySelector("#account-form")?.addEventListener("submit", saveAccount);
+  document.querySelector("#menu-import-form")?.addEventListener("submit", startMenuImport);
+  document.querySelector("#menu-import-review-form")?.addEventListener("submit", saveMenuImport);
+  document.querySelectorAll("[data-remove-import-category]").forEach((node) => node.addEventListener("click", () => {
+    menuImportDraft.categories.splice(Number(node.dataset.removeImportCategory), 1);
+    render();
+  }));
+  document.querySelectorAll("[data-remove-import-item]").forEach((node) => node.addEventListener("click", () => {
+    menuImportDraft.categories[Number(node.dataset.importCategory)].items.splice(Number(node.dataset.removeImportItem), 1);
+    render();
+  }));
+  document.querySelectorAll("[data-add-import-item]").forEach((node) => node.addEventListener("click", () => {
+    menuImportDraft.categories[Number(node.dataset.addImportItem)].items.push({
+      name: "",
+      description: "",
+      price_cents: null,
+    });
+    render();
+  }));
+  document.querySelector("[data-add-import-category]")?.addEventListener("click", () => {
+    menuImportDraft.categories.push({
+      name: "",
+      items: [{ name: "", description: "", price_cents: null }],
+    });
+    render();
+  });
   document.querySelector("#restaurant-search")?.addEventListener("input", (event) => {
     searchTerm = event.target.value;
     const position = event.target.selectionStart;
@@ -811,6 +915,94 @@ async function saveItem(event) {
     render();
     toast(found ? "Menu item updated" : "Menu item added");
   } catch (error) {
+    reportError(error);
+  }
+}
+
+async function startMenuImport(event) {
+  event.preventDefault();
+  if (!isSupabaseConfigured) {
+    return toast("Connect Supabase to use AI menu imports.");
+  }
+
+  const data = new FormData(event.currentTarget);
+  const files = data
+    .getAll("menu-images")
+    .filter((file) => file instanceof File && file.size);
+  if (files.length < 1 || files.length > 3) {
+    return toast("Choose between one and three menu photos.");
+  }
+
+  menuImportStatus = "Uploading and reading your menu…";
+  render();
+  try {
+    const result = await extractMenuFromImages(state.restaurant.id, files);
+    menuImportDraft = result.menu;
+    menuImportId = result.importId;
+    menuImportStatus = "";
+    if (modal?.type === "menu-import") render();
+  } catch (error) {
+    menuImportStatus = "";
+    if (modal?.type === "menu-import") render();
+    reportError(error);
+  }
+}
+
+async function saveMenuImport(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+
+  try {
+    if (!menuImportId) {
+      throw new Error("This menu import has expired. Scan the photos again.");
+    }
+    if (!menuImportDraft.categories.length) {
+      throw new Error("Add at least one category.");
+    }
+
+    const categories = menuImportDraft.categories.map((category, categoryIndex) => {
+      const name = form.elements[`category-${categoryIndex}`].value.trim();
+      if (!name) throw new Error("Every category needs a name.");
+
+      const items = category.items.map((_item, itemIndex) => {
+        const itemName = form.elements[`name-${categoryIndex}-${itemIndex}`].value.trim();
+        const description = form.elements[`description-${categoryIndex}-${itemIndex}`].value.trim();
+        const priceValue = form.elements[`price-${categoryIndex}-${itemIndex}`].value.trim();
+        if (!itemName) throw new Error("Every menu item needs a name.");
+        if (priceValue === "" || Number(priceValue) < 0) {
+          throw new Error(`Enter a valid price for ${itemName}.`);
+        }
+        return {
+          name: itemName,
+          description,
+          price: Number(priceValue),
+        };
+      });
+
+      return { name, items };
+    });
+
+    if (!categories.some((category) => category.items.length)) {
+      throw new Error("Add at least one menu item.");
+    }
+
+    menuImportStatus = "Adding categories and items…";
+    render();
+    const result = await commitImportedMenu(
+      state.restaurant.id,
+      menuImportId,
+      categories,
+    );
+    await refreshWorkspace();
+    modal = null;
+    menuImportDraft = null;
+    menuImportId = null;
+    menuImportStatus = "";
+    render();
+    toast(`Added ${result.item_count} items in ${result.category_count} categories.`);
+  } catch (error) {
+    menuImportStatus = "";
+    if (modal?.type === "menu-import") render();
     reportError(error);
   }
 }

@@ -18,7 +18,9 @@
     "supabase:functions": "supabase functions serve admin-restaurants --env-file supabase/.env.local"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.8"
+    "@supabase/supabase-js": "^2.110.8",
+    "ai": "^7.0.42",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "supabase": "^2.109.1",
