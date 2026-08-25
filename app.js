@@ -10,6 +10,7 @@ import {
   getPublicMenu,
   listAdminRestaurants,
   loadOwnerWorkspace,
+  loadRestaurantWorkspace,
   setPublished,
   updateRestaurant as updateRestaurantRecord,
 } from "./src/services/restaurants.js";
@@ -121,6 +122,7 @@ let currentUserId = null;
 let menuImportDraft = null;
 let menuImportId = null;
 let menuImportStatus = "";
+let adminEditingRestaurantId = null;
 
 function loadState() {
   if (isSupabaseConfigured) return structuredClone(seed);
@@ -280,7 +282,7 @@ function sidebar() {
       <div class="nav-label">${admin ? "Administration" : "Workspace"}</div>
       <nav class="nav-list">
         ${admin
-          ? `${navItem("admin", "dashboard", "Overview")}${navItem("restaurants", "users", "Restaurants", state.restaurants.length)}`
+          ? `${navItem("admin", "dashboard", "Overview")}${navItem("restaurants", "users", "Restaurants", state.restaurants.length)}${adminEditingRestaurantId ? navItem("menu", "menu", "Editing menu", state.categories.reduce((n, c) => n + c.items.length, 0)) : ""}`
           : `${navItem("dashboard", "dashboard", "Overview")}${navItem("menu", "menu", "Menu manager", state.categories.reduce((n, c) => n + c.items.length, 0))}${navItem("restaurant", "store", "Restaurant")}${navItem("public", "eye", "View live menu")}`}
       </nav>
       <div class="sidebar-bottom">
@@ -310,7 +312,11 @@ function topbar(title, primary = "") {
 function renderApp(current) {
   let content;
   if (state.session.role === "admin") {
-    content = current === "restaurants" ? adminRestaurants() : adminDashboard();
+    content = current === "menu" && adminEditingRestaurantId
+      ? menuManager()
+      : current === "restaurants"
+        ? adminRestaurants()
+        : adminDashboard();
   } else if (current === "menu") {
     content = menuManager();
   } else if (current === "restaurant") {
@@ -388,11 +394,13 @@ function activity(icon, title, subtitle, time) {
 
 function menuManager() {
   const total = state.categories.reduce((n, category) => n + category.items.length, 0);
+  const adminEditing = state.session.role === "admin";
   return `<div class="content">
     <div class="page-header">
-      <div><div class="eyebrow">Menu content</div><h1>Menu manager</h1><p>${total} items across ${state.categories.length} categories. Changes save automatically.</p></div>
-      <div class="page-actions"><button class="btn" data-modal="menu-import">${icons.upload} Import photo</button><button class="btn" data-modal="category">${icons.plus} Category</button><button class="btn primary" data-modal="item">${icons.plus} Add item</button></div>
+      <div><div class="eyebrow">${adminEditing ? "Super Admin menu editor" : "Menu content"}</div><h1>${adminEditing ? escapeHtml(state.restaurant.name) : "Menu manager"}</h1><p>${total} items across ${state.categories.length} categories. Changes save automatically.</p></div>
+      <div class="page-actions">${adminEditing ? `<button class="btn" data-action="back-to-restaurants">← Back to restaurants</button>` : `<button class="btn" data-modal="menu-import">${icons.upload} Import photo</button>`}<button class="btn" data-modal="category">${icons.plus} Category</button><button class="btn primary" data-modal="item">${icons.plus} Add item</button></div>
     </div>
+    ${adminEditing ? `<div class="admin-editing-notice"><span class="pill">Admin editing</span><span>You are directly editing <strong>${escapeHtml(state.restaurant.name)}</strong>. Owner permissions are not required.</span></div>` : ""}
     <div class="section-stack">
       ${state.categories.map((category, index) => categoryCard(category, index)).join("") || '<div class="empty card"><strong>Your menu is empty</strong>Add a category to get started.</div>'}
     </div>
@@ -513,7 +521,7 @@ function restaurantTable(restaurants, controls) {
       <td><strong>${escapeHtml(r.owner)}</strong><br><span style="color:var(--muted);font-size:10px">${escapeHtml(r.email)}</span></td>
       <td><span class="pill ${r.status === "disabled" ? "disabled" : ""}">${r.status}</span></td>
       <td>${r.items}</td><td>${r.joined}</td>
-      ${controls ? `<td><div class="row-actions"><button class="btn small" data-modal="restaurant-account" data-id="${r.id}">${icons.edit} Edit</button><button class="btn small" data-modal="menu-transfer" data-id="${r.id}" ${r.items === 0 ? 'disabled title="This portal has no menu to transfer"' : 'title="Transfer menu and public link"'}>${icons.menu} Transfer</button><button class="btn ghost icon-only small" data-reset="${r.id}" title="Reset password">${icons.lock}</button><button class="btn ghost icon-only small" data-toggle-account="${r.id}" title="${r.status === "active" ? "Disable" : "Enable"}">${r.status === "active" ? "⊘" : "✓"}</button><button class="btn ghost danger icon-only small" data-delete-account="${r.id}" title="Delete">${icons.trash}</button></div></td>` : ""}
+      ${controls ? `<td><div class="row-actions"><button class="btn small" data-manage-menu="${r.id}">${icons.menu} Menu</button><button class="btn small" data-modal="restaurant-account" data-id="${r.id}">${icons.edit} Edit</button><button class="btn small" data-modal="menu-transfer" data-id="${r.id}" ${r.items === 0 ? 'disabled title="This portal has no menu to transfer"' : 'title="Transfer menu and public link"'}>Transfer</button><button class="btn ghost icon-only small" data-reset="${r.id}" title="Reset password">${icons.lock}</button><button class="btn ghost icon-only small" data-toggle-account="${r.id}" title="${r.status === "active" ? "Disable" : "Enable"}">${r.status === "active" ? "⊘" : "✓"}</button><button class="btn ghost danger icon-only small" data-delete-account="${r.id}" title="Delete">${icons.trash}</button></div></td>` : ""}
     </tr>`).join("") || '<tr><td colspan="6" class="empty">No restaurants found.</td></tr>'}
   </tbody></table>`;
 }
@@ -717,6 +725,7 @@ function bindCommon() {
   document.querySelectorAll("[data-reset]").forEach((node) => node.addEventListener("click", () => resetAccount(node.dataset.reset)));
   document.querySelectorAll("[data-toggle-account]").forEach((node) => node.addEventListener("click", () => toggleAccount(node.dataset.toggleAccount)));
   document.querySelectorAll("[data-delete-account]").forEach((node) => node.addEventListener("click", () => deleteAccount(node.dataset.deleteAccount)));
+  document.querySelectorAll("[data-manage-menu]").forEach((node) => node.addEventListener("click", () => openAdminMenu(node.dataset.manageMenu)));
   document.querySelector("#restaurant-form")?.addEventListener("submit", saveRestaurant);
   document.querySelector("#category-form")?.addEventListener("submit", saveCategory);
   document.querySelector("#item-form")?.addEventListener("submit", saveItem);
@@ -784,7 +793,10 @@ async function hydrateAuthenticatedState() {
 
 async function refreshWorkspace() {
   if (!isSupabaseConfigured || !currentUserId) return;
-  const workspace = await loadOwnerWorkspace(currentUserId);
+  const workspace =
+    state.session.role === "admin" && adminEditingRestaurantId
+      ? await loadRestaurantWorkspace(adminEditingRestaurantId)
+      : await loadOwnerWorkspace(currentUserId);
   if (!workspace) throw new Error("No restaurant is assigned to this owner account.");
   state.restaurant = workspace.restaurant;
   state.categories = workspace.categories;
@@ -847,6 +859,7 @@ async function handleAction(event) {
     try {
       if (isSupabaseConfigured) await signOut();
       currentUserId = null;
+      adminEditingRestaurantId = null;
       state.session.loggedIn = false;
       saveState();
       navigate("login");
@@ -858,6 +871,9 @@ async function handleAction(event) {
   } else if (action === "close-modal") {
     modal = null;
     render();
+  } else if (action === "back-to-restaurants") {
+    adminEditingRestaurantId = null;
+    navigate("restaurants");
   } else if (action === "publish") {
     const published = !state.restaurant.published;
     try {
@@ -881,6 +897,27 @@ async function handleAction(event) {
     } catch (error) {
       reportError(error);
     }
+  }
+}
+
+async function openAdminMenu(restaurantId) {
+  const restaurant = state.restaurants.find((candidate) => candidate.id === restaurantId);
+  if (!restaurant) return toast("Restaurant portal not found.");
+
+  try {
+    if (isSupabaseConfigured) {
+      const workspace = await loadRestaurantWorkspace(restaurantId);
+      state.restaurant = workspace.restaurant;
+      state.categories = workspace.categories;
+    } else {
+      state.restaurant = { ...state.restaurant, ...restaurant };
+    }
+    adminEditingRestaurantId = restaurantId;
+    navigate("menu");
+    render();
+    toast(`Editing ${restaurant.name}`);
+  } catch (error) {
+    reportError(error);
   }
 }
 

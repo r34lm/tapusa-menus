@@ -1290,3 +1290,20 @@ textarea.field:focus {
 .transfer-confirm input {
   margin-top: 2px;
 }
+
+.admin-editing-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 11px 14px;
+  border: 1px solid rgba(95, 141, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(95, 141, 255, 0.06);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-editing-notice strong {
+  color: var(--text);
+}
