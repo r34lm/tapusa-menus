@@ -66,3 +66,11 @@ export function resetOwnerPassword(email) {
 export function deleteRestaurantAccount(restaurantId, ownerId) {
   return invokeAdmin({ action: "delete", restaurantId, ownerId });
 }
+
+export function transferRestaurantMenu(sourceRestaurantId, destinationRestaurantId) {
+  return invokeAdmin({
+    action: "transfer_menu",
+    restaurantId: sourceRestaurantId,
+    destinationRestaurantId,
+  });
+}

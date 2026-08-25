@@ -1223,3 +1223,70 @@ textarea.field:focus {
     grid-column: auto;
   }
 }
+
+/* Super Admin menu transfer */
+
+.menu-transfer-modal {
+  width: min(620px, 100%);
+}
+
+.transfer-source {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.transfer-source > div {
+  display: grid;
+  gap: 2px;
+}
+
+.transfer-source strong {
+  font-size: 14px;
+}
+
+.transfer-source > div > span:last-child {
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+}
+
+.transfer-warning {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(237, 119, 119, 0.26);
+  border-radius: 10px;
+  background: rgba(237, 119, 119, 0.07);
+  color: #d7a1a1;
+  font-size: 12px;
+}
+
+.transfer-warning strong {
+  color: #f0b5b5;
+}
+
+.transfer-warning ul {
+  display: grid;
+  gap: 5px;
+  margin: 9px 0 0;
+  padding-left: 18px;
+}
+
+.transfer-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.transfer-confirm input {
+  margin-top: 2px;
+}

@@ -34,6 +34,7 @@ import {
   deleteRestaurantAccount,
   resetOwnerPassword,
   setRestaurantAccountStatus,
+  transferRestaurantMenu,
   updateRestaurantAccount,
 } from "./src/services/admin.js";
 import { slugify } from "./src/utils/slug.js";
@@ -512,7 +513,7 @@ function restaurantTable(restaurants, controls) {
       <td><strong>${escapeHtml(r.owner)}</strong><br><span style="color:var(--muted);font-size:10px">${escapeHtml(r.email)}</span></td>
       <td><span class="pill ${r.status === "disabled" ? "disabled" : ""}">${r.status}</span></td>
       <td>${r.items}</td><td>${r.joined}</td>
-      ${controls ? `<td><div class="row-actions"><button class="btn small" data-modal="restaurant-account" data-id="${r.id}">${icons.edit} Edit</button><button class="btn ghost icon-only small" data-reset="${r.id}" title="Reset password">${icons.lock}</button><button class="btn ghost icon-only small" data-toggle-account="${r.id}" title="${r.status === "active" ? "Disable" : "Enable"}">${r.status === "active" ? "⊘" : "✓"}</button><button class="btn ghost danger icon-only small" data-delete-account="${r.id}" title="Delete">${icons.trash}</button></div></td>` : ""}
+      ${controls ? `<td><div class="row-actions"><button class="btn small" data-modal="restaurant-account" data-id="${r.id}">${icons.edit} Edit</button><button class="btn small" data-modal="menu-transfer" data-id="${r.id}" ${r.items === 0 ? 'disabled title="This portal has no menu to transfer"' : 'title="Transfer menu and public link"'}>${icons.menu} Transfer</button><button class="btn ghost icon-only small" data-reset="${r.id}" title="Reset password">${icons.lock}</button><button class="btn ghost icon-only small" data-toggle-account="${r.id}" title="${r.status === "active" ? "Disable" : "Enable"}">${r.status === "active" ? "⊘" : "✓"}</button><button class="btn ghost danger icon-only small" data-delete-account="${r.id}" title="Delete">${icons.trash}</button></div></td>` : ""}
     </tr>`).join("") || '<tr><td colspan="6" class="empty">No restaurants found.</td></tr>'}
   </tbody></table>`;
 }
@@ -638,6 +639,39 @@ function modalMarkup() {
       ${restaurant ? `<div class="form-group full"><label>Status</label><select class="field" name="status"><option value="active" ${restaurant.status === "active" ? "selected" : ""}>Active</option><option value="disabled" ${restaurant.status === "disabled" ? "selected" : ""}>Disabled</option></select></div>` : ""}
     </div></form>`, "account-form", restaurant ? "Save account" : "Create account");
   }
+  if (modal.type === "menu-transfer") {
+    const source = state.restaurants.find((restaurant) => restaurant.id === modal.id);
+    const destinations = state.restaurants.filter((restaurant) => restaurant.id !== modal.id);
+    if (!source) return "";
+    return modalShell(
+      "Transfer menu to another portal",
+      `<form id="menu-transfer-form">
+        <div class="transfer-source">
+          <span class="restaurant-logo">${escapeHtml(source.name.split(" ").map((part) => part[0]).join("").slice(0, 2))}</span>
+          <div><span class="field-help">Moving from</span><strong>${escapeHtml(source.name)}</strong><span>menus.tapusa.online/${escapeHtml(source.slug)}</span></div>
+        </div>
+        <div class="form-group">
+          <label for="transfer-destination">Destination portal</label>
+          <select class="field" id="transfer-destination" name="destination" required>
+            <option value="">Select a restaurant portal</option>
+            ${destinations.map((restaurant) => `<option value="${restaurant.id}">${escapeHtml(restaurant.name)} — /${escapeHtml(restaurant.slug)}${restaurant.items ? ` — replaces ${restaurant.items} item${restaurant.items === 1 ? "" : "s"}` : ""}</option>`).join("")}
+          </select>
+        </div>
+        <div class="transfer-warning">
+          <strong>This transfer cannot be undone automatically.</strong>
+          <ul>
+            <li>The destination menu will be permanently replaced.</li>
+            <li>${escapeHtml(source.name)} will be left with an empty menu.</li>
+            <li>The two public menu links will be swapped.</li>
+          </ul>
+        </div>
+        <label class="transfer-confirm"><input type="checkbox" name="confirmed" required> I understand that the destination menu will be replaced.</label>
+      </form>`,
+      "menu-transfer-form",
+      "Transfer menu & link",
+      "menu-transfer-modal",
+    );
+  }
   return "";
 }
 
@@ -687,6 +721,7 @@ function bindCommon() {
   document.querySelector("#category-form")?.addEventListener("submit", saveCategory);
   document.querySelector("#item-form")?.addEventListener("submit", saveItem);
   document.querySelector("#account-form")?.addEventListener("submit", saveAccount);
+  document.querySelector("#menu-transfer-form")?.addEventListener("submit", saveMenuTransfer);
   document.querySelector("#menu-import-form")?.addEventListener("submit", startMenuImport);
   document.querySelector("#menu-import-review-form")?.addEventListener("submit", saveMenuImport);
   document.querySelectorAll("[data-remove-import-category]").forEach((node) => node.addEventListener("click", () => {
@@ -1077,6 +1112,40 @@ async function saveAccount(event) {
     modal = null;
     render();
     toast(existing ? "Restaurant account updated" : "Restaurant account created");
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+async function saveMenuTransfer(event) {
+  event.preventDefault();
+  const source = state.restaurants.find((restaurant) => restaurant.id === modal.id);
+  const data = new FormData(event.currentTarget);
+  const destination = state.restaurants.find(
+    (restaurant) => restaurant.id === data.get("destination"),
+  );
+  if (!source || !destination) {
+    return toast("Choose a valid destination portal.");
+  }
+
+  try {
+    if (isSupabaseConfigured) {
+      await transferRestaurantMenu(source.id, destination.id);
+      await refreshAdminRestaurants();
+    } else {
+      const sourceItems = source.items;
+      source.items = 0;
+      destination.items = sourceItems;
+      [source.slug, destination.slug] = [destination.slug, source.slug];
+      [source.published, destination.published] = [
+        destination.published,
+        source.published,
+      ];
+      saveState();
+    }
+    modal = null;
+    render();
+    toast(`Menu and public link transferred to ${destination.name}`);
   } catch (error) {
     reportError(error);
   }

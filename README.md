@@ -112,6 +112,12 @@ All subsequent owner accounts are created from the Super Admin portal.
 The production host must rewrite unknown paths to `/index.html` so restaurant
 slugs such as `/ember-and-oak` reach the client application.
 
+Super Admins can transfer a complete menu to another restaurant portal from the
+Restaurants table. A transfer replaces the destination menu, moves the source
+categories and items, copies item images to the destination storage folder, and
+swaps the two public menu links and publication states. The source portal is
+left with an empty menu.
+
 ## AI menu photo import
 
 Owners can upload one to three JPG, PNG, or WebP menu photos from the Menu

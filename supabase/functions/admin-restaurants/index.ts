@@ -11,11 +11,13 @@ type AdminAction =
   | "update"
   | "set_status"
   | "reset_password"
+  | "transfer_menu"
   | "delete";
 
 interface AdminRequest {
   action: AdminAction;
   restaurantId?: string;
+  destinationRestaurantId?: string;
   ownerId?: string;
   name?: string;
   slug?: string;
@@ -78,6 +80,7 @@ Deno.serve(async (request) => {
     let restaurantId = body.restaurantId ?? null;
     let targetUserId = body.ownerId ?? null;
     let result: Record<string, unknown> = {};
+    let actionMetadata: Record<string, unknown> = {};
 
     if (body.action === "create") {
       const name = requireString(body.name, "name");
@@ -184,6 +187,86 @@ Deno.serve(async (request) => {
       });
       if (error) throw error;
       result = { sent: true };
+    } else if (body.action === "transfer_menu") {
+      restaurantId = requireString(body.restaurantId, "restaurantId");
+      const destinationRestaurantId = requireString(
+        body.destinationRestaurantId,
+        "destinationRestaurantId",
+      );
+      if (restaurantId === destinationRestaurantId) {
+        throw new Error("Source and destination portals must be different");
+      }
+
+      const bucket = adminClient.storage.from("restaurant-media");
+      const sourcePrefix = `${restaurantId}/items`;
+      const destinationPrefix = `${destinationRestaurantId}/items`;
+      const [
+        { data: sourceFiles, error: sourceListError },
+        { data: destinationFiles, error: destinationListError },
+      ] = await Promise.all([
+        bucket.list(sourcePrefix, { limit: 1000 }),
+        bucket.list(destinationPrefix, { limit: 1000 }),
+      ]);
+      if (sourceListError) throw sourceListError;
+      if (destinationListError) throw destinationListError;
+
+      const sourcePaths = (sourceFiles ?? []).map(
+        (file) => `${sourcePrefix}/${file.name}`,
+      );
+      const oldDestinationPaths = (destinationFiles ?? []).map(
+        (file) => `${destinationPrefix}/${file.name}`,
+      );
+      const copiedPaths: string[] = [];
+
+      try {
+        for (const sourcePath of sourcePaths) {
+          const fileName = sourcePath.slice(sourcePath.lastIndexOf("/") + 1);
+          const destinationPath = `${destinationPrefix}/${fileName}`;
+          const { error: copyError } = await bucket.copy(
+            sourcePath,
+            destinationPath,
+          );
+          if (copyError) throw copyError;
+          copiedPaths.push(destinationPath);
+        }
+
+        const { data: transfer, error: transferError } = await adminClient.rpc(
+          "transfer_restaurant_menu",
+          {
+            source_restaurant_id: restaurantId,
+            destination_restaurant_id: destinationRestaurantId,
+          },
+        );
+        if (transferError) throw transferError;
+
+        const cleanupPaths = [...sourcePaths, ...oldDestinationPaths];
+        if (cleanupPaths.length) {
+          const { error: cleanupError } = await bucket.remove(cleanupPaths);
+          if (cleanupError) {
+            console.error("Menu transfer storage cleanup failed", cleanupError);
+          }
+        }
+
+        result = {
+          transfer,
+          copiedItemImages: copiedPaths.length,
+          destinationRestaurantId,
+        };
+        actionMetadata = {
+          ...(typeof transfer === "object" && transfer ? transfer : {}),
+          source_restaurant_id: restaurantId,
+          destination_restaurant_id: destinationRestaurantId,
+          copied_item_images: copiedPaths.length,
+        };
+      } catch (error) {
+        if (copiedPaths.length) {
+          const { error: rollbackError } = await bucket.remove(copiedPaths);
+          if (rollbackError) {
+            console.error("Menu transfer storage rollback failed", rollbackError);
+          }
+        }
+        throw error;
+      }
     } else if (body.action === "delete") {
       restaurantId = requireString(body.restaurantId, "restaurantId");
       targetUserId = requireString(body.ownerId, "ownerId");
@@ -215,11 +298,18 @@ Deno.serve(async (request) => {
 
     await adminClient.from("audit_events").insert({
       actor_id: userData.user.id,
-      restaurant_id: body.action === "delete" ? null : restaurantId,
+      restaurant_id:
+        body.action === "delete"
+          ? null
+          : body.action === "transfer_menu"
+            ? body.destinationRestaurantId
+            : restaurantId,
       target_user_id: targetUserId,
       action: `restaurant.${body.action}`,
       metadata: {
+        ...actionMetadata,
         restaurant_id: restaurantId,
+        destination_restaurant_id: body.destinationRestaurantId ?? null,
         status: body.status ?? null,
         email: body.email ?? null,
       },
