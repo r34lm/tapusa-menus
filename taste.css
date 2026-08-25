@@ -991,6 +991,25 @@ textarea.field:focus {
     align-items: flex-start;
   }
 
+  .page-actions {
+    flex-wrap: wrap;
+  }
+
+  .menu-page-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .menu-page-actions .btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .menu-page-actions .btn.primary {
+    grid-column: 1 / -1;
+  }
+
   .stats-grid {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto;

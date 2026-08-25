@@ -282,7 +282,7 @@ function sidebar() {
       <div class="nav-label">${admin ? "Administration" : "Workspace"}</div>
       <nav class="nav-list">
         ${admin
-          ? `${navItem("admin", "dashboard", "Overview")}${navItem("restaurants", "users", "Restaurants", state.restaurants.length)}${adminEditingRestaurantId ? navItem("menu", "menu", "Editing menu", state.categories.reduce((n, c) => n + c.items.length, 0)) : ""}`
+          ? `${navItem("admin", "dashboard", "Overview")}${navItem("restaurants", "users", "Restaurants", state.restaurants.length)}${adminEditingRestaurantId ? `${navItem("menu", "menu", "Editing menu", state.categories.reduce((n, c) => n + c.items.length, 0))}${navItem("restaurant", "store", "Profile & branding")}` : ""}`
           : `${navItem("dashboard", "dashboard", "Overview")}${navItem("menu", "menu", "Menu manager", state.categories.reduce((n, c) => n + c.items.length, 0))}${navItem("restaurant", "store", "Restaurant")}${navItem("public", "eye", "View live menu")}`}
       </nav>
       <div class="sidebar-bottom">
@@ -314,6 +314,8 @@ function renderApp(current) {
   if (state.session.role === "admin") {
     content = current === "menu" && adminEditingRestaurantId
       ? menuManager()
+      : current === "restaurant" && adminEditingRestaurantId
+        ? restaurantSettings()
       : current === "restaurants"
         ? adminRestaurants()
         : adminDashboard();
@@ -398,7 +400,7 @@ function menuManager() {
   return `<div class="content">
     <div class="page-header">
       <div><div class="eyebrow">${adminEditing ? "Super Admin menu editor" : "Menu content"}</div><h1>${adminEditing ? escapeHtml(state.restaurant.name) : "Menu manager"}</h1><p>${total} items across ${state.categories.length} categories. Changes save automatically.</p></div>
-      <div class="page-actions">${adminEditing ? `<button class="btn" data-action="back-to-restaurants">← Back to restaurants</button>` : `<button class="btn" data-modal="menu-import">${icons.upload} Import photo</button>`}<button class="btn" data-modal="category">${icons.plus} Category</button><button class="btn primary" data-modal="item">${icons.plus} Add item</button></div>
+      <div class="page-actions menu-page-actions">${adminEditing ? `<button class="btn" data-action="back-to-restaurants">← Back</button><a class="btn" href="#restaurant">${icons.store} Profile</a>` : `<button class="btn" data-modal="menu-import">${icons.upload} Import photo</button>`}<button class="btn" data-modal="category">${icons.plus} Add category</button><button class="btn primary" data-modal="item">${icons.plus} Add item</button></div>
     </div>
     ${adminEditing ? `<div class="admin-editing-notice"><span class="pill">Admin editing</span><span>You are directly editing <strong>${escapeHtml(state.restaurant.name)}</strong>. Owner permissions are not required.</span></div>` : ""}
     <div class="section-stack">
@@ -440,10 +442,11 @@ function menuItemRow(category, item, index) {
 
 function restaurantSettings() {
   const r = state.restaurant;
+  const adminEditing = state.session.role === "admin";
   return `<div class="content">
     <div class="page-header">
-      <div><div class="eyebrow">Profile & branding</div><h1>Restaurant settings</h1><p>Keep your public profile accurate and on brand.</p></div>
-      <div class="page-actions"><button class="btn primary" type="submit" form="restaurant-form">${icons.check} Save changes</button></div>
+      <div><div class="eyebrow">${adminEditing ? "Super Admin profile editor" : "Profile & branding"}</div><h1>${adminEditing ? escapeHtml(r.name) : "Restaurant settings"}</h1><p>Edit the public bio, contact details, header image, and restaurant icon.</p></div>
+      <div class="page-actions">${adminEditing ? `<button class="btn" data-action="back-to-restaurants">← Back to restaurants</button><a class="btn" href="#menu">${icons.menu} Menu</a>` : ""}<button class="btn primary" type="submit" form="restaurant-form">${icons.check} Save changes</button></div>
     </div>
     <form id="restaurant-form" class="card">
       <div class="card-header"><div><h2>Restaurant details</h2><p>This information appears on your public menu.</p></div></div>
@@ -1104,6 +1107,7 @@ async function saveRestaurant(event) {
 
     if (isSupabaseConfigured) {
       state.restaurant = await updateRestaurantRecord(state.restaurant.id, changes);
+      if (state.session.role === "admin") await refreshAdminRestaurants();
     } else {
       Object.assign(state.restaurant, changes);
       saveState();
